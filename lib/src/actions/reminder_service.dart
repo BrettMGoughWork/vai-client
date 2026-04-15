@@ -1,0 +1,105 @@
+import 'dart:developer' as dev;
+
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
+
+import '../content/content_data.dart';
+
+/// Schedules OS-level reminders based on [ReminderContentData].
+///
+/// Responsibility sits here (the actions layer) rather than in the content or
+/// UX layers: content parsing is the content layer's job; rendering is the UX
+/// layer's job; triggering OS side-effects belongs in actions.
+abstract interface class ReminderService {
+  Future<void> initialize();
+  Future<void> scheduleReminder(ReminderContentData data);
+}
+
+/// Android implementation backed by [FlutterLocalNotificationsPlugin].
+class AndroidReminderService implements ReminderService {
+  AndroidReminderService({FlutterLocalNotificationsPlugin? plugin})
+      : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
+
+  final FlutterLocalNotificationsPlugin _plugin;
+
+  static const String _channelId = 'vai_reminders';
+  static const String _channelName = 'Reminders';
+  static const String _channelDescription = 'Scheduled reminders set by Vai';
+
+  @override
+  Future<void> initialize() async {
+    tz.initializeTimeZones();
+
+    const AndroidInitializationSettings androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    await _plugin.initialize(
+      settings: const InitializationSettings(android: androidSettings),
+    );
+
+    // Request permissions — prompts the user on Android 13+ and for exact
+    // alarms on Android 12+.
+    final AndroidFlutterLocalNotificationsPlugin? androidPlugin = _plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    await androidPlugin?.requestNotificationsPermission();
+    await androidPlugin?.requestExactAlarmsPermission();
+  }
+
+  @override
+  Future<void> scheduleReminder(ReminderContentData data) async {
+    final DateTime scheduledAt = _resolveScheduledTime(data.when);
+    final int id = DateTime.now().millisecondsSinceEpoch & 0x7FFFFFFF;
+    final String title = data.title ?? 'Reminder';
+
+    await _plugin.zonedSchedule(
+      id: id,
+      title: title,
+      body: data.text,
+      scheduledDate: tz.TZDateTime.from(scheduledAt.toUtc(), tz.UTC),
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: _channelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+    );
+
+    dev.log(
+      'Reminder scheduled: "$title" at $scheduledAt (id=$id)',
+      name: 'ReminderService',
+    );
+  }
+
+  /// Tries to parse [when] as ISO 8601. Falls back to 30 s from now so the
+  /// notification fires quickly and is visible during development/testing.
+  DateTime _resolveScheduledTime(String? when) {
+    if (when != null) {
+      final DateTime? parsed = DateTime.tryParse(when);
+      if (parsed != null) {
+        return parsed;
+      }
+      dev.log(
+        'Could not parse reminder "when" field ("$when") — scheduling 30 s from now',
+        name: 'ReminderService',
+      );
+    }
+    return DateTime.now().add(const Duration(seconds: 30));
+  }
+}
+
+/// No-op stub for non-Android platforms and unit tests.
+class NoopReminderService implements ReminderService {
+  const NoopReminderService();
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<void> scheduleReminder(ReminderContentData data) async {}
+}

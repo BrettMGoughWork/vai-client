@@ -73,14 +73,25 @@ class ContentRendererRegistry {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Text(
-          data.title ?? 'Reminder',
-          style: const TextStyle(
-            color: Color(0xFFE8E8E8),
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.8,
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Icon(
+              Icons.alarm_rounded,
+              color: Color(0xFFE8E8E8),
+              size: 13,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              data.title ?? 'Reminder',
+              style: const TextStyle(
+                color: Color(0xFFE8E8E8),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 6),
         Text(

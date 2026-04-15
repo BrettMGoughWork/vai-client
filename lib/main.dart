@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'src/actions/reminder_service.dart';
 import 'src/ux/chat_controller.dart';
 import 'src/ux/chat_page.dart';
 import 'src/transport/vai_transport_client.dart';
@@ -22,6 +23,7 @@ class _MainAppState extends State<MainApp> {
       connector: const WebSocketChannelConnector(),
     ),
     serverUri: _serverUriFromEnvironment(),
+    reminderService: AndroidReminderService(),
   );
 
   @override

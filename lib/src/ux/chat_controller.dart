@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../actions/reminder_service.dart';
+import '../content/content_data.dart';
 import '../content/content_type.dart';
 import '../diagnostics/structured_logger.dart';
 import '../transport/lifecycle.dart';
@@ -19,10 +21,12 @@ class ChatController extends ChangeNotifier {
     required Uri serverUri,
     String Function()? intentIdGenerator,
     StructuredLogger? logger,
+    ReminderService? reminderService,
   })  : _transportClient = transportClient,
         _serverUri = serverUri,
         _intentIdGenerator = intentIdGenerator ?? const Uuid().v4,
-        _logger = logger ?? defaultStructuredLogger {
+        _logger = logger ?? defaultStructuredLogger,
+        _reminderService = reminderService ?? const NoopReminderService() {
     _subscription = _transportClient.events.listen(_handleEvent);
   }
 
@@ -30,6 +34,7 @@ class ChatController extends ChangeNotifier {
   final Uri _serverUri;
   final String Function() _intentIdGenerator;
   final StructuredLogger _logger;
+  final ReminderService _reminderService;
 
   late final StreamSubscription<VaiTransportEvent> _subscription;
   final List<ChatTurn> _turns = <ChatTurn>[];
@@ -53,6 +58,7 @@ class ChatController extends ChangeNotifier {
     _logger.info('ux', 'chat_controller_start', <String, Object?>{
       'server_uri': _serverUri.toString(),
     });
+    unawaited(_reminderService.initialize());
     try {
       await _transportClient.connect(_serverUri);
     } on ProtocolException catch (error) {
@@ -196,6 +202,11 @@ class ChatController extends ChangeNotifier {
             finalContent: contentEvent.content,
           ),
         );
+        // Schedule OS reminder when the final content is a reminder action.
+        final ContentData data = contentEvent.content.data;
+        if (data is ReminderContentData) {
+          unawaited(_reminderService.scheduleReminder(data));
+        }
     }
   }
 
